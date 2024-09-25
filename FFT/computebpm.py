@@ -11,7 +11,7 @@ def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85):
     audio1=audio1/np.max(audio1)
     audio1=audio1*audio1
     #Calcul de la convolution (mouyenne mobile)
-    AVGMEAN_WINDOWSIZE=SAMPLING_FREQUENCY//5
+    AVGMEAN_WINDOWSIZE=SAMPLING_FREQUENCY//10
     convolute=np.sqrt(np.convolve(audio1,np.ones(AVGMEAN_WINDOWSIZE)/AVGMEAN_WINDOWSIZE,mode='same'))
 
     # Calcule de la spline de frontière beat
@@ -42,7 +42,13 @@ def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85):
     diff=np.convolve(convolute,diffpatt,mode="valid")
     indexes=np.where(diff==1)
     return indexes
-
+    
+# Apply a low pass filter
+def applyFilter(audio,SAMPLING_FREQUENCY):
+    sos = butter(6, 80, 'low', fs=SAMPLING_FREQUENCY, output='sos')
+    audio = signal.sosfilt(sos, audio)
+    return audio
+    
 # Return the estimated BPM for the file.
 def computebpm(wavpath,percentileflottaison=85):
     SAMPLING_FREQUENCY, data = wavfile.read(wavpath) # load the sampling rate and the audio data
@@ -50,8 +56,7 @@ def computebpm(wavpath,percentileflottaison=85):
     audio = data.T[0] # this is a two channel soundtrack, get the first track
     audio=decimate(audio,DECIMATION_FACTOR)
     print("Max audio avant filtre",np.max(audio))
-    sos = butter(2, 100, 'low', fs=SAMPLING_FREQUENCY, output='sos')
-    audio = signal.sosfilt(sos, audio)
+    audio = applyFilter(audio,SAMPLING_FREQUENCY)
     print("Max audio après filtre",np.max(audio))
     SAMPLING_FREQUENCY=SAMPLING_FREQUENCY//5
     print("Frequence d'échantillonage",SAMPLING_FREQUENCY)
