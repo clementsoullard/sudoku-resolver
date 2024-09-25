@@ -5,28 +5,15 @@ from scipy.signal import butter
 from scipy import signal
 from scipy.interpolate import CubicSpline
 
-
-
-# Return the estimated BPM for the file.
-def computebpm(wavpath,percentileflottaison=85):
-    SAMPLING_FREQUENCY, data = wavfile.read(wavpath) # load the sampling rate and the audio data
-    DECIMATION_FACTOR=5
-    audio = data.T[0] # this is a two channel soundtrack, get the first track
-    audio=decimate(audio,DECIMATION_FACTOR)
-    print("Max audio avant filtre",np.max(audio))
-    sos = butter(2, 100, 'low', fs=SAMPLING_FREQUENCY, output='sos')
-    audio = signal.sosfilt(sos, audio)
-    print("Max audio après filtre",np.max(audio))
-    SAMPLING_FREQUENCY=SAMPLING_FREQUENCY//5
-    print("Frequence d'échantillonage",SAMPLING_FREQUENCY)
-    print("Nombre de sample",len(audio))
-    #Calcul de la convolution (mouyenne mobile)
-    AVGMEAN_WINDOWSIZE=SAMPLING_FREQUENCY//5
-    totfft=np.zeros(len(audio))
+# Retourne les index des franchissements de la ligne de flottaison
+def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85):
     audio1=audio.astype(float)
     audio1=audio1/np.max(audio1)
     audio1=audio1*audio1
+    #Calcul de la convolution (mouyenne mobile)
+    AVGMEAN_WINDOWSIZE=SAMPLING_FREQUENCY//5
     convolute=np.sqrt(np.convolve(audio1,np.ones(AVGMEAN_WINDOWSIZE)/AVGMEAN_WINDOWSIZE,mode='same'))
+
     # Calcule de la spline de frontière beat
     # La moyenne mobile est calculée sur un nombre de seconde
     # durée de la moyenne pour la ligne de flotasons
@@ -54,7 +41,27 @@ def computebpm(wavpath,percentileflottaison=85):
     diffpatt=np.array([1,-1])
     diff=np.convolve(convolute,diffpatt,mode="valid")
     indexes=np.where(diff==1)
+    return indexes
+
+# Return the estimated BPM for the file.
+def computebpm(wavpath,percentileflottaison=85):
+    SAMPLING_FREQUENCY, data = wavfile.read(wavpath) # load the sampling rate and the audio data
+    DECIMATION_FACTOR=5
+    audio = data.T[0] # this is a two channel soundtrack, get the first track
+    audio=decimate(audio,DECIMATION_FACTOR)
+    print("Max audio avant filtre",np.max(audio))
+    sos = butter(2, 100, 'low', fs=SAMPLING_FREQUENCY, output='sos')
+    audio = signal.sosfilt(sos, audio)
+    print("Max audio après filtre",np.max(audio))
+    SAMPLING_FREQUENCY=SAMPLING_FREQUENCY//5
+    print("Frequence d'échantillonage",SAMPLING_FREQUENCY)
+    print("Nombre de sample",len(audio))
+
+    indexes=getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison)
+    
     print("Nombre de points de franchissement positif de la ligne de flottaison",len(indexes[0]))
+    
+    diffpatt=np.array([1,-1])
     diffsp=np.convolve(indexes[0],diffpatt,mode="valid")/SAMPLING_FREQUENCY
     # Conversion en bpm des intervalles
     invdiffsp=60/diffsp
