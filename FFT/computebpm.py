@@ -6,18 +6,16 @@ from scipy import signal
 from scipy.interpolate import CubicSpline
 
 # Retourne les index des franchissements de la ligne de flottaison
-def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85):
+def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85,convolutioninsec=.1,NBSECFLOTTAISON=15):
     audio1=audio.astype(float)
     audio1=audio1/np.max(audio1)
     audio1=audio1*audio1
     #Calcul de la convolution (mouyenne mobile)
-    AVGMEAN_WINDOWSIZE=SAMPLING_FREQUENCY//10
+    AVGMEAN_WINDOWSIZE=int(SAMPLING_FREQUENCY*convolutioninsec)
     convolute=np.sqrt(np.convolve(audio1,np.ones(AVGMEAN_WINDOWSIZE)/AVGMEAN_WINDOWSIZE,mode='same'))
-
     # Calcule de la spline de frontière beat
     # La moyenne mobile est calculée sur un nombre de seconde
     # durée de la moyenne pour la ligne de flotasons
-    NBSECFLOTTAISON=15
     WINDOWSIZEINNBSAMPLE=int(SAMPLING_FREQUENCY*NBSECFLOTTAISON)
     N=len(convolute)
     print("Fenêtre d'échantillon pour la spline de flottaison",WINDOWSIZEINNBSAMPLE)
@@ -44,8 +42,8 @@ def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85):
     return indexes
     
 # Apply a low pass filter
-def applyFilter(audio,SAMPLING_FREQUENCY):
-    sos = butter(6, 80, 'low', fs=SAMPLING_FREQUENCY, output='sos')
+def applyFilter(audio,SAMPLING_FREQUENCY,lowcut=100):
+    sos = butter(6, lowcut, 'low', fs=SAMPLING_FREQUENCY, output='sos')
     audio = signal.sosfilt(sos, audio)
     return audio
     
@@ -61,18 +59,22 @@ def computebpm(wavpath,percentileflottaison=85):
     SAMPLING_FREQUENCY=SAMPLING_FREQUENCY//5
     print("Frequence d'échantillonage",SAMPLING_FREQUENCY)
     print("Nombre de sample",len(audio))
-
     indexes=getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison)
-    
-    print("Nombre de points de franchissement positif de la ligne de flottaison",len(indexes[0]))
-    
-    diffpatt=np.array([1,-1])
-    diffsp=np.convolve(indexes[0],diffpatt,mode="valid")/SAMPLING_FREQUENCY
-    # Conversion en bpm des intervalles
-    invdiffsp=60/diffsp
+    invdiffsp=getSpaces(indexes[0])
     bins=np.histogram(invdiffsp,bins=50,range=[10,220])
     min=bins[1][np.argmax(bins[0])]
     max=bins[1][np.argmax(bins[0])+1]
     print("Bpm",np.mean(invdiffsp[(invdiffsp>min) & (invdiffsp<max)])*2)
+
+# Return the spaces between indexes.
+def getSpaces(indexes,SAMPLING_FREQUENCY):
+    print("Nombre de points de franchissement positif de la ligne de flottaison",len(indexes))   
+    diffpatt=np.array([1,-1])
+    diffsp=np.convolve(indexes,diffpatt,mode="valid")/SAMPLING_FREQUENCY
+    # Conversion en bpm des intervalles
+    invdiffsp=60/diffsp
+    return diffsp
+
+
     
 
