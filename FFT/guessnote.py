@@ -9,6 +9,7 @@ import os
 import scipy.signal as signal
 from math import log2
 from math import pow
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -67,6 +68,12 @@ def getSFFT(filename,attenuationfloordb,FFT_WINDOW_SECONDS = 1):
 
 
 # Create the X file the file to feed the neural network
+# the X format is the following 
+# i is the frequencynote axis (axis=0) 
+# j is the time axis (axis=0) 
+# The frequencynote on line 0 gather the frequencies below zero
+# The even i are the note gatethering frequencies inside the tolerance
+# The uneven i are the frequencies between two notes and not inside the tolerance interval
 def prepareInputX(SFT,Sx_dB,targetfilename,tolerance):
     print("Map2note")
     bornes=buildScale(tolerance)
@@ -121,3 +128,28 @@ def getKeyboard():
             keyboard.append(notename)
     keyboard.append("Outbound upper")
     return keyboard
+    
+# Return the main notes for a given note freqinnotesrepresentation. 
+def getMainNotes(X):
+    #Note: keyboard would be converted with benefit in a class attribute
+    keyboard=getKeyboard()
+    tona=X.sum(axis=1)
+    tona=tona-np.min(tona)
+    tona=tona/np.max(tona)
+    tona=tona[range(1,len(tona),2)]
+    
+    convolvevect=[-.25,-.25,1,-.25,-.25]
+    tonaconvolved=np.convolve(tona,convolvevect,mode='same')
+    tonaconvolved=tonaconvolved.clip(min=0)
+    
+    binsids=np.where(tonaconvolved>.2)[0]+1
+    binsids=binsids%12
+    binsids=np.unique(binsids)
+    print(binsids)
+    #print(int(5).dtype)
+    #binsids=binsids.astype(int).tolist()
+    #print(binsids)
+    #print(keyboard)
+    mainNotes=np.unique([re.sub("[0-9]$","",keyboard[i]) for i in binsids]) 
+    print(mainNotes)
+    return binsids-1
