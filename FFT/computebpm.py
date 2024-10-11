@@ -4,6 +4,7 @@ import numpy as np
 from scipy.signal import butter
 from scipy import signal
 from scipy.interpolate import CubicSpline
+from scipy.io.wavfile import write
 
 # Retourne les index des franchissements de la ligne de flottaison
 def getFranchissements(audio,SAMPLING_FREQUENCY,percentileflottaison=85,convolutioninsec=.1,NBSECFLOTTAISON=15):
@@ -74,6 +75,20 @@ def getSpaces(indexes,SAMPLING_FREQUENCY):
     # Conversion en bpm des intervalles
     invdiffsp=60/diffsp
     return diffsp
+    
+# Add some bip in the file
+def addBip(originalaudio,ORIGINAL_SAMPLING_FREQUENCY,bippos,destfilename):
+    biplength=ORIGINAL_SAMPLING_FREQUENCY//10
+    x=np.array([i/ORIGINAL_SAMPLING_FREQUENCY for i in range(biplength)])
+    y=np.sin((x*440*2*np.pi))
+    ii16 = np.iinfo(np.int16)
+    y=(y*.7*ii16.max).astype(np.int16)
+    for i in bippos:
+        audiosample=originalaudio[i:i+biplength]
+        audiosample=(audiosample//2+y//2)
+        originalaudio[i:i+biplength]=audiosample
+    write(destfilename, ORIGINAL_SAMPLING_FREQUENCY,originalaudio.astype(np.int16))
+
 
 
     

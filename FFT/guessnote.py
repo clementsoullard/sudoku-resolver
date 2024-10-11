@@ -60,7 +60,7 @@ def getSFFT(filename,attenuationfloordb,FFT_WINDOW_SECONDS = 1):
     windowsize=int(fs*FFT_WINDOW_SECONDS)
     win = tukey(windowsize)  # symmetric Gaussian window
     SFT = ShortTimeFFT(win, hop=fs//10, fs=fs,  scale_to='psd')
-    Sx2 = SFT.spectrogram(y)
+    Sx2 = SFT.spectrogram(y,p0=4,p1=1500)
     # print('max Sx2',np.max(Sx2))
     #x=[i/10 for i in range (len(y)*10//fs)]
     Sx_dB = 10 * np.log10(np.fmax(Sx2, pow(10,attenuationfloordb)))  # limit range to -40 dB   
