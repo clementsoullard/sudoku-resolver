@@ -24,63 +24,62 @@ alog=log2(440)
 #The bin boundary in frequency for each tone
 bornes=[]
 
-# Construction de la table mappant table vers index de note.
-mapftonote={}
-
-def mapFreq2Note(SFT):
-    # Nous cherchons à mapper un fréquence de la FFT vers une note.
-    mapftonote={}
-    for i,f in enumerate(SFT.f):
-        index=np.searchsorted(bornes,f)
-        mapftonote[i]=index
-    # Nous inversons la mapping pour permettre une surjection des fréquence vers une note
-    inv_map = {}
-    for k, v in mapftonote.items():
-        inv_map[v] = inv_map.get(v, []) + [k]
-    print(mapftonote)
+# Return the correspondancy table beetween an note and a set of frequencies in the SFourier transform
+def getMapFreq2Note(SFFT,bornes):
+    mapnote2freq={}
+    lastidx=0
+    for i,freq in enumerate(bornes[:-1]):   
+        indexmax=np.searchsorted(SFFT.f,freq)
+    #    print(i,SFFT.f[lastidx:indexmax])
+        mapnote2freq[i]=list(range(lastidx,indexmax))
+        lastidx=indexmax
+    return mapnote2freq
     
 
 # This takes as an input 
 # - a filename of a wav file  
 # The tolerance to what we consider "in-tune" (a little less than a quarter of a tone)
 # attenuationfloordb the power to consider as floor for noise
-def serialize(filename,tolerance,attenuationfloordb=-5):
+def serialize(filename,tolerance,attenuationfloordb=-5,FFT_WINDOW_SECONDS = 1):
     # Do not need to be computed every time, but leaving for now
-    buildScale(tolerance)
+    #buildScale(tolerance)
+    getKeyboard()
+    SFT, Sx_dB = getSFFT(filename,attenuationfloordb=attenuationfloordb,FFT_WINDOW_SECONDS = FFT_WINDOW_SECONDS)
+    print('max Sx_dB',np.max(Sx_dB))
+    targetfilename=filename.replace(".wav",".npy")
+    prepareInputX(SFT,Sx_dB,targetfilename,tolerance)
+    
+# Return the Spectrogram and the SFT
+# FFT_WINDOW_SECONDS = duration of the window for SFT analysis
+def getSFFT(filename,attenuationfloordb,FFT_WINDOW_SECONDS = 1):
     fs,y = wavfile.read(filename) # load the data
     y=y.T[0]
     y=y/np.max(y)*2
-    FFT_WINDOW_SECONDS = 1/2 # how many seconds of audio make up an FFT window
+    # how many seconds of audio make up an FFT window
     windowsize=int(fs*FFT_WINDOW_SECONDS)
     win = tukey(windowsize)  # symmetric Gaussian window
     SFT = ShortTimeFFT(win, hop=fs//10, fs=fs,  scale_to='psd')
     Sx2 = SFT.spectrogram(y)
-    print('max Sx2',np.max(Sx2))
+    # print('max Sx2',np.max(Sx2))
     #x=[i/10 for i in range (len(y)*10//fs)]
     Sx_dB = 10 * np.log10(np.fmax(Sx2, pow(10,attenuationfloordb)))  # limit range to -40 dB   
-    print('max Sx_dB',np.max(Sx_dB))
-    targetfilename=filename.replace(".wav",".npy")
-    prepareInputX(SFT,Sx_dB,targetfilename)
-    
+    return SFT,Sx_dB
+
 
 # Create the X file the file to feed the neural network
-def prepareInputX(SFT,Sx_dB,targetfilename):
-    X=mapFreq2Note(SFT,Sx_dB)
+def prepareInputX(SFT,Sx_dB,targetfilename,tolerance):
+    print("Map2note")
+    bornes=buildScale(tolerance)
+    X=mapFreq2Note(SFT,Sx_dB,bornes)
     print("Serializing file",targetfilename)
     np.save(targetfilename,X);
+    print("End of serialization",targetfilename)
+
     
-# Map the FFT to the notes as per the construction
-def mapFreq2Note(SFT,Sx_dB):
-    # Construction de la table mappant table vers index de note.
-    mapftonote={}
-    # Nous cherchons à mapper un fréquence de la FFT vers une note.
-    for i,f in enumerate(SFT.f):
-        index=np.searchsorted(bornes,f)
-        mapftonote[i]=index
-    # Nous inversons la mapping pour permettre une surjection des fréquence vers une note
-    inv_map = {}   
-    for k, v in mapftonote.items():
-        inv_map[v] = inv_map.get(v, []) + [k]
+# Map the SFFT result to the notes 
+# The resulting matrix contains now some notes (not frequencies)
+def mapFreq2Note(SFT,Sx_dB,bornes):
+    inv_map = getMapFreq2Note(SFT,bornes)   
     # Nous prenons l'analyse FFT et la convertissons en une analyse note.
     # Construction du X qui servira à l'apprentissage profond.    
     notetable=np.full((len(bornes)+1,Sx_dB.shape[1]),-50.)
@@ -88,8 +87,7 @@ def mapFreq2Note(SFT,Sx_dB):
     for i in range(Sx_dB.shape[1]):
         #Pour chaque bin de fréquence (note ou intervalle entre note) nous aggrégeons sur la puissance maximale de de fréquence
         for k,v in inv_map.items():
-            notetable[k,i]=np.max(Sx_dB[v,i])
-    #print("inv_map",inv_map)
+            notetable[k,i]=np.max(Sx_dB[v,i])    
     return notetable
 
 # Initialize the gloabl var that will be used to convert vibrating frequencies into a note. 
@@ -111,12 +109,15 @@ def buildScale(tolerance):
         upperbound=pow(2,alog-increment*i+tolerance)
         bornes.extend([lowerbound,upperbound])
     #Adding the lower bound
-    bornes.extend([-1])
+   # bornes.extend([-1])
     bornes.sort()
-    
+    return bornes
+
+def getKeyboard():
     keyboard=["Out of bound lower"]
     for i in range (0,7):
         for j in notescale:
             notename=j+str(i)
             keyboard.append(notename)
     keyboard.append("Outbound upper")
+    return keyboard
